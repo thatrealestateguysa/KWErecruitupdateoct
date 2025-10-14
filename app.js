@@ -1,4 +1,4 @@
-/* Tabs-style frontend with GET fallback + extra KPI tiles + instant row removal on status update */
+/* Compact red/grey/white frontend, GET fallback, instant row removal */
 const API = window.DEFAULT_API;
 document.getElementById('api-url').textContent = API;
 
@@ -8,7 +8,6 @@ const STATUSES = [
   'Appointment booked','cultivate','decided not to join','do not contact'
 ];
 
-/* KPI order now includes the 4 new statuses, appended after the originals */
 const KPI_ORDER = [
   ['TOTAL', null],
   ['TO CONTACT','To Contact'],
@@ -28,7 +27,7 @@ const KPI_ORDER = [
 
 const $ = s=>document.querySelector(s);
 const $$ = s=>Array.from(document.querySelectorAll(s));
-function toast(m,t=2600){const el=$('#toast'); el.textContent=m; el.style.display='block'; setTimeout(()=>el.style.display='none',t);}
+function toast(m,t=2400){const el=$('#toast'); el.textContent=m; el.style.display='block'; setTimeout(()=>el.style.display='none',t);}
 
 async function postAPI(action, payload={}){
   const r = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action,payload})});
@@ -36,8 +35,7 @@ async function postAPI(action, payload={}){
   if(j.result!=='success') throw new Error(j.message||'API error');
   return j.payload || j.message || 'OK';
 }
-
-async function getAPI(){ // fallback to old doGet that returns {data:[[]]}
+async function getAPI(){
   const r = await fetch(API);
   const j = await r.json().catch(()=>({result:'error'}));
   if(j.result!=='success' || !Array.isArray(j.data)) throw new Error('GET fallback failed');
@@ -48,10 +46,7 @@ function mapSheetRowsToView(matrix){
   if(!matrix || matrix.length<2) return [];
   const headers = matrix[0].map(x=>String(x||'').trim().toLowerCase());
   const idx = name => headers.indexOf(name.toLowerCase());
-  const pick = (row, colName) => {
-    const i = idx(colName);
-    return i>=0 ? row[i] : '';
-  };
+  const pick = (row, colName) => { const i = idx(colName); return i>=0 ? row[i] : ''; };
   const rows = [];
   for(let i=1;i<matrix.length;i++){
     const r = matrix[i];
@@ -150,17 +145,16 @@ function renderTable(){
     sel.value = r.status || '';
     sel.addEventListener('change', async()=>{
       const newStatus = sel.value;
-      try{ 
+      try{
         await postAPI('updateSingleStatus', {rowIndex:r.idx, newStatus});
         r.status = newStatus;
         r.lastContactDate = new Date().toISOString();
-        // instant UI update
-        renderTable();
-        renderKPIs(ALL, null);
+        renderTable();           // row disappears if filtered
+        renderKPIs(ALL, null);   // instant KPI refresh
         toast('Status updated');
-      } catch(e){ 
-        console.error(e); 
-        toast('Failed to update status'); 
+      }catch(e){
+        console.error(e);
+        toast('Failed to update status');
         sel.value = r.status || '';
       }
     });
@@ -173,7 +167,7 @@ function renderTable(){
     // Notes area
     const tdNotes = document.createElement('td');
     const ta = document.createElement('textarea'); ta.className='textarea'; ta.value = r.notes || '';
-    const btn = document.createElement('button'); btn.textContent = 'Save'; btn.style.marginTop='6px';
+    const btn = document.createElement('button'); btn.textContent = 'Save'; btn.className='ghost'; btn.style.marginTop='6px';
     btn.addEventListener('click', async()=>{
       try{ await postAPI('updateSingleNote', {rowIndex:r.idx, newNote: ta.value}); r.notes = ta.value; toast('Note saved'); }
       catch(e){ console.error(e); toast('Failed to save note'); }
@@ -188,9 +182,7 @@ function renderTable(){
   }
 }
 
-function getChecked() {
-  return $$('.row-check:checked').map(x=>parseInt(x.dataset.idx,10)).filter(n=>!isNaN(n));
-}
+function getChecked(){ return $$('.row-check:checked').map(x=>parseInt(x.dataset.idx,10)).filter(n=>!isNaN(n)); }
 
 async function applyBulk(){
   const st = $('#bulk-status').value;
@@ -200,7 +192,6 @@ async function applyBulk(){
   if(!confirm(`Set ${rows.length} row(s) to "${st}"?`)) return;
   try{
     await postAPI('bulkUpdateStatus', {rowIndices: rows, newStatus: st});
-    // update local data instantly
     ALL.forEach(r=>{ if(rows.includes(r.idx)) r.status = st; });
     renderTable(); renderKPIs(ALL, null);
     toast('Updated');
@@ -212,25 +203,15 @@ function clearBulk(){ $$('#grid .row-check').forEach(c=>c.checked=false); $('#bu
 async function load(){
   try{
     let rows;
-    try{
-      rows = await postAPI('getRecruitsView', {}); // preferred
-    }catch(e){
-      // fallback to GET
-      const matrix = await getAPI();
-      rows = mapSheetRowsToView(matrix);
-    }
+    try{ rows = await postAPI('getRecruitsView', {}); }
+    catch(e){ const matrix = await getAPI(); rows = mapSheetRowsToView(matrix); }
     ALL = rows || [];
-    // Try to get server counts; ignore if missing
-    let stats = null;
-    try{ stats = await postAPI('getStats', {}); } catch(_){{}}
-
-    // fill agencies list
+    let stats=null; try{ stats = await postAPI('getStats', {});}catch(_){}
     fillAgency(uniq(ALL.map(r=>r.agency)));
     renderKPIs(ALL, stats);
     renderTable();
   }catch(e){
-    console.error(e);
-    toast('Load failed');
+    console.error(e); toast('Load failed');
   }
 }
 
