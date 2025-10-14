@@ -8,88 +8,81 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="app-header">
-    <div class="brand">
-      <div class="logo">🏠</div>
-      <div>
-        <h1>KWE Recruit Machine</h1>
-        <div class="subtitle">Lightweight CRM for agent recruiting</div>
-      </div>
+  <header class="bar">
+    <div class="left">
+      <h1>KWE Recruit Machine</h1>
     </div>
-    <div class="actions">
-      <button id="btn-refresh">Refresh</button>
+    <div class="right">
+      <button id="btn-refresh" class="ghost">Refresh</button>
+      <button id="btn-prepare" class="ghost">Prepare</button>
       <button id="btn-rerun" class="primary">Re-run</button>
-      <button id="btn-fix">Fix Dropdowns</button>
-      <span class="divider"></span>
-      <button id="btn-import">Import → Recruits</button>
-      <button id="btn-setup-import">Setup Import</button>
+      <button id="btn-fix" class="ghost">Fix Dropdowns</button>
+      <button id="btn-import" class="ghost">Import → Recruits</button>
     </div>
   </header>
 
-  <main class="container">
-    <!-- KPI tiles -->
-    <section class="kpis" id="kpis">
-      <!-- filled by JS -->
+  <main class="wrap">
+    <!-- KPI TABS -->
+    <section id="kpi-row" class="kpis"></section>
+
+    <!-- Filters row -->
+    <section class="panel">
+      <div class="panel-title">FILTERS</div>
+      <div class="filters">
+        <input id="search" type="search" placeholder="Search…">
+        <select id="agency-filter"><option value="">Agency (all)</option></select>
+        <select id="status-filter"><option value="">Invite to Events/ Networking</option></select>
+        <div class="spacer"></div>
+        <button id="btn-reset" class="ghost">Reset</button>
+      </div>
+      <div class="hint">Click a status block to filter. Your selection stays active while you update rows. Notes save with the <b>Save</b> button per row.</div>
     </section>
 
-    <!-- Filters -->
-    <section class="filters">
-      <input id="search" type="search" placeholder="Search name, phone, email, suburb, agency…" />
-      <select id="status-filter">
-        <option value="">All statuses</option>
-      </select>
-      <select id="type-filter">
-        <option value="">All listing types</option>
-        <option>On Show</option>
-        <option>New Listing</option>
-        <option>Rental</option>
-        <option>Other</option>
-      </select>
-      <button id="clear-filters">Clear</button>
-      <div class="spacer"></div>
-      <select id="bulk-status">
-        <option value="">Bulk: set status…</option>
-      </select>
-      <button id="apply-bulk" class="secondary">Apply to selected</button>
-      <button id="export-csv">Export CSV</button>
+    <!-- Recruits table -->
+    <section class="panel">
+      <div class="panel-title">RECRUITS</div>
+      <div class="bulk">
+        <div class="left">
+          <label><input type="checkbox" id="check-all"> </label>
+        </div>
+        <div class="right">
+          <span class="muted">BULK ACTIONS</span>
+          <select id="bulk-status"><option value="">Set Status to...</option></select>
+          <button id="btn-apply" class="apply">Apply</button>
+          <button id="btn-clear" class="ghost">Clear</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="grid">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Listing Type</th>
+              <th>WhatsApp Link</th>
+              <th>Status</th>
+              <th>Name</th>
+              <th>Surname</th>
+              <th>Contact Number</th>
+              <th>Notes</th>
+              <th>Agency</th>
+              <th>Suburb</th>
+            </tr>
+          </thead>
+          <tbody id="grid-body"></tbody>
+        </table>
+        <div id="empty" class="empty">No rows.</div>
+      </div>
     </section>
 
-    <!-- Table -->
-    <section class="table-wrap">
-      <table id="grid">
-        <thead>
-          <tr>
-            <th><input type="checkbox" id="check-all"></th>
-            <th>Listing</th>
-            <th>Ref</th>
-            <th>Name</th>
-            <th>Surname</th>
-            <th>Phone</th>
-            <th>Email</th>
-            <th>Suburb</th>
-            <th>Agency</th>
-            <th>Status</th>
-            <th>Last Contact</th>
-            <th>Notes</th>
-            <th>WhatsApp</th>
-          </tr>
-        </thead>
-        <tbody id="grid-body"></tbody>
-      </table>
-      <div id="empty" class="empty">No rows. Try clearing filters or click Re-run.</div>
-    </section>
+    <footer class="foot">
+      <span>API: <code id="api-url"></code></span>
+      <span>v2025.10.14.0310</span>
+    </footer>
   </main>
 
-  <footer class="footer">
-    <div>API: <code id="api-url"></code></div>
-    <div>v2025.10.14</div>
-  </footer>
-
   <div id="toast" class="toast"></div>
-
-  <script>
-    window.DEFAULT_API = "https://script.google.com/macros/s/AKfycbxsYJMTFMxCp2hx1X7HrTSs-bhsr3m4rDWCZ_XPZNy1sKsR8Zyz43ox6Z0a_yNh-B5d8Q/exec";
-  </script>
+  <script>window.DEFAULT_API = "https://script.google.com/macros/s/AKfycbxsYJMTFMxCp2hx1X7HrTSs-bhsr3m4rDWCZ_XPZNy1sKsR8Zyz43ox6Z0a_yNh-B5d8Q/exec";</script>
   <script src="app.js"></script>
 </body>
 </html>

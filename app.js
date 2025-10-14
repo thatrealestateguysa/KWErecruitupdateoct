@@ -1,206 +1,192 @@
-/* KWE Recruit Machine — Frontend (Vanilla JS)
- * - Works with Apps Script backend using JSON actions
- * - API URL is set via window.DEFAULT_API in index.html
- */
-const API_BASE = window.DEFAULT_API || 'https://script.google.com/macros/s/AKfycbxsYJMTFMxCp2hx1X7HrTSs-bhsr3m4rDWCZ_XPZNy1sKsR8Zyz43ox6Z0a_yNh-B5d8Q/exec';
-document.getElementById('api-url').textContent = API_BASE;
+/* KWE Recruit Machine — Frontend (tabs-style, label order preserved) */
+const API = window.DEFAULT_API;
+document.getElementById('api-url').textContent = API;
 
-const STATUS_OPTIONS = [
+const STATUSES = [
   'To Contact','Whatsapp Sent','No Whatsapp','Replied','Not Interested in KW',
   'Invite to Events/ Networking','Appointment','Ready to join KW','JOINED',
+  // extra options still selectable in dropdowns
   'Appointment booked','cultivate','decided not to join','do not contact'
 ];
 
-const TYPE_OPTIONS = ['On Show','New Listing','Rental','Other'];
+const KPI_ORDER = [
+  ['TOTAL', null],
+  ['TO CONTACT','To Contact'],
+  ['WHATSAPP SENT','Whatsapp Sent'],
+  ['NO WHATSAPP','No Whatsapp'],
+  ['REPLIED','Replied'],
+  ['NOT INTERESTED IN KW','Not Interested in KW'],
+  ['INVITE TO EVENTS/ NETWORKING','Invite to Events/ Networking'],
+  ['APPOINTMENT','Appointment'],
+  ['READY TO JOIN KW','Ready to join KW'],
+  ['JOINED','JOINED']
+];
 
-const $ = sel => document.querySelector(sel);
-const $$ = sel => Array.from(document.querySelectorAll(sel));
-
-function toast(msg, t=2800){ const el=$('#toast'); el.textContent=msg; el.style.display='block'; setTimeout(()=>el.style.display='none', t); }
+const $ = s=>document.querySelector(s);
+const $$ = s=>Array.from(document.querySelectorAll(s));
+function toast(m,t=2600){const el=$('#toast'); el.textContent=m; el.style.display='block'; setTimeout(()=>el.style.display='none',t);}
 
 async function api(action, payload={}){
-  const res = await fetch(API_BASE, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ action, payload })
-  });
-  const j = await res.json().catch(()=>({result:'error', message:'Invalid JSON'}));
+  const r = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action,payload})});
+  const j = await r.json().catch(()=>({result:'error',message:'Invalid JSON'}));
   if(j.result!=='success') throw new Error(j.message||'API error');
   return j.payload || j.message || 'OK';
 }
 
-let RAW_ROWS = []; // full dataset from server
-let VIEW_ROWS = []; // filtered view
+let ALL = [];
+let VIEW = [];
+let CURRENT_STATUS_FILTER = '';
 
-function fillStatusDropdowns(){
+function uniq(arr){ return [...new Set(arr.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b))); }
+
+function fillDropdowns(){
+  // status filters
   const sf = $('#status-filter');
   const bs = $('#bulk-status');
-  STATUS_OPTIONS.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sf.appendChild(o.cloneNode(true)); });
-  STATUS_OPTIONS.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; bs.appendChild(o); });
+  sf.innerHTML = `<option value="">Invite to Events/ Networking</option>` + STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
+  bs.innerHTML = `<option value="">Set Status to...</option>` + STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
 }
 
-function fmtDate(d){
-  if(!d) return '';
-  try{ const dt = (d instanceof Date) ? d : new Date(d); if(isNaN(dt)) return ''; return dt.toISOString().slice(0,10); }catch(_){ return ''}
+function fillAgency(agencies){
+  const sel = $('#agency-filter');
+  sel.innerHTML = `<option value="">Agency (all)</option>` + agencies.map(a=>`<option value="${a}">${a}</option>`).join('');
 }
 
-function rowMatchesFilter(r, term, status, type){
-  const hay = [r.name, r.surname, r.phone, r.email, r.suburb, r.agency].map(x=>String(x||'').toLowerCase()).join(' ');
-  if(term && !hay.includes(term)) return false;
-  if(status && String(r.status||'')!==status) return false;
-  if(type && String(r.listingType||'')!==type) return false;
+function computeCounts(rows){
+  const counts = {};
+  rows.forEach(r=>{ const k = String(r.status||'').trim(); counts[k]=(counts[k]||0)+1; });
+  return counts;
+}
+
+function renderKPIs(rows, serverStats){
+  const el = $('#kpi-row');
+  const counts = serverStats?.counts || computeCounts(rows);
+  const total = serverStats?.total ?? rows.length;
+  el.innerHTML = KPI_ORDER.map(([label, status])=>{
+    const val = status ? (counts[status]||0) : total;
+    const active = (status && CURRENT_STATUS_FILTER===status) || (!status && !CURRENT_STATUS_FILTER);
+    return `<div class="kpi ${active?'active':''}" data-status="${status||''}">
+      <div class="val">${val}</div>
+      <div class="lab">${label}</div>
+    </div>`;
+  }).join('');
+  $$('#kpi-row .kpi').forEach(k=>k.addEventListener('click',()=>{
+    CURRENT_STATUS_FILTER = k.dataset.status || '';
+    $('#status-filter').value = CURRENT_STATUS_FILTER;
+    renderTable();
+    renderKPIs(ALL, serverStats);
+  }));
+}
+
+function matchFilters(r){
+  const q = $('#search').value.trim().toLowerCase();
+  const ag = $('#agency-filter').value;
+  const st = $('#status-filter').value || CURRENT_STATUS_FILTER;
+  if(q){
+    const hay = [r.name,r.surname,r.phone,r.email,r.suburb,r.agency].map(x=>String(x||'').toLowerCase()).join(' ');
+    if(!hay.includes(q)) return false;
+  }
+  if(ag && String(r.agency||'')!==ag) return false;
+  if(st && String(r.status||'')!==st) return false;
   return true;
 }
 
-function renderKPIs(stats) {
-  const el = $('#kpis');
-  const counts = stats?.counts || RAW_ROWS.reduce((acc,r)=>{const k=String(r.status||'').trim(); acc[k]=(acc[k]||0)+1; return acc;},{});
-  const total = stats?.total ?? RAW_ROWS.length;
-  el.innerHTML = `
-    <div class="kpi"><div class="label">Total Contacts</div><div class="value">${total}</div></div>
-    <div class="kpi"><div class="label">Whatsapp Sent</div><div class="value">${counts['Whatsapp Sent']||0}</div></div>
-    <div class="kpi"><div class="label">Replied</div><div class="value">${counts['Replied']||0}</div></div>
-    <div class="kpi"><div class="label">Appointments</div><div class="value">${(counts['Appointment']||0)+(counts['Appointment booked']||0)}</div></div>
-  `;
-}
+function renderTable(){
+  const body = $('#grid-body'); body.innerHTML='';
+  VIEW = ALL.filter(matchFilters);
+  $('#empty').style.display = VIEW.length ? 'none' : 'block';
 
-function renderTable() {
-  const body = $('#grid-body');
-  body.innerHTML = '';
-  const term = $('#search').value.trim().toLowerCase();
-  const st = $('#status-filter').value;
-  const lt = $('#type-filter').value;
-  VIEW_ROWS = RAW_ROWS.filter(r => rowMatchesFilter(r, term, st, lt));
-  $('#empty').style.display = VIEW_ROWS.length ? 'none' : 'block';
-
-  for(const r of VIEW_ROWS){
+  for(const r of VIEW){
     const tr = document.createElement('tr');
 
-    // checkbox
-    const tdSel = document.createElement('td');
-    tdSel.innerHTML = `<input class="row-check checkbox" type="checkbox" data-idx="${r.idx}">`;
-    tr.appendChild(tdSel);
+    const tdChk = document.createElement('td'); tdChk.innerHTML = `<input class="row-check" type="checkbox" data-idx="${r.idx}">`; tr.appendChild(tdChk);
+    const tdType = document.createElement('td'); tdType.textContent = r.listingType||''; tr.appendChild(tdType);
+    const tdWa = document.createElement('td'); tdWa.innerHTML = r.waLink ? `<a class="wa" target="_blank" href="${r.waLink}">Open</a>` : '<span class="muted">n/a</span>'; tr.appendChild(tdWa);
 
-    const tdType = document.createElement('td'); tdType.textContent = r.listingType || ''; tr.appendChild(tdType);
-    const tdRef = document.createElement('td'); tdRef.textContent = r.listingRef || ''; tr.appendChild(tdRef);
-    const tdName = document.createElement('td'); tdName.textContent = r.name || ''; tr.appendChild(tdName);
-    const tdSurname = document.createElement('td'); tdSurname.textContent = r.surname || ''; tr.appendChild(tdSurname);
-    const tdPhone = document.createElement('td'); tdPhone.textContent = r.phone || ''; tr.appendChild(tdPhone);
-    const tdEmail = document.createElement('td'); tdEmail.innerHTML = r.email ? `<a href="mailto:${r.email}">${r.email}</a>` : ''; tr.appendChild(tdEmail);
-    const tdSuburb = document.createElement('td'); tdSuburb.textContent = r.suburb || ''; tr.appendChild(tdSuburb);
-    const tdAgency = document.createElement('td'); tdAgency.textContent = r.agency || ''; tr.appendChild(tdAgency);
-
-    // status select
+    // Status select
     const tdStatus = document.createElement('td');
     const sel = document.createElement('select');
-    sel.innerHTML = STATUS_OPTIONS.map(s => `<option value="${s}">${s}</option>`).join('');
+    sel.innerHTML = STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
     sel.value = r.status || '';
-    sel.addEventListener('change', async () => {
-      try{ await api('updateSingleStatus', { rowIndex:r.idx, newStatus: sel.value }); toast('Status updated'); r.status = sel.value; }
+    sel.addEventListener('change', async()=>{
+      try{ await api('updateSingleStatus', {rowIndex:r.idx, newStatus: sel.value}); r.status = sel.value; toast('Status updated'); }
       catch(e){ console.error(e); toast('Failed to update status'); }
     });
     tdStatus.appendChild(sel); tr.appendChild(tdStatus);
 
-    const tdLCD = document.createElement('td'); tdLCD.textContent = fmtDate(r.lastContactDate); tr.appendChild(tdLCD);
+    const tdName = document.createElement('td'); tdName.textContent = r.name||''; tr.appendChild(tdName);
+    const tdSurname = document.createElement('td'); tdSurname.textContent = r.surname||''; tr.appendChild(tdSurname);
+    const tdPhone = document.createElement('td'); tdPhone.textContent = r.phone||''; tr.appendChild(tdPhone);
 
-    // notes (inline textarea + save)
+    // Notes area
     const tdNotes = document.createElement('td');
     const ta = document.createElement('textarea'); ta.className='textarea'; ta.value = r.notes || '';
-    const saveBtn = document.createElement('button'); saveBtn.textContent='Save'; saveBtn.style.marginTop='6px';
-    saveBtn.addEventListener('click', async()=>{
-      try{ await api('updateSingleNote', { rowIndex:r.idx, newNote: ta.value }); toast('Note saved'); r.notes = ta.value; }
+    const btn = document.createElement('button'); btn.textContent = 'Save'; btn.style.marginTop='6px';
+    btn.addEventListener('click', async()=>{
+      try{ await api('updateSingleNote', {rowIndex:r.idx, newNote: ta.value}); r.notes = ta.value; toast('Note saved'); }
       catch(e){ console.error(e); toast('Failed to save note'); }
     });
-    tdNotes.appendChild(ta); tdNotes.appendChild(saveBtn);
+    tdNotes.appendChild(ta); tdNotes.appendChild(btn);
     tr.appendChild(tdNotes);
 
-    // WhatsApp
-    const tdWA = document.createElement('td');
-    if(r.waLink) { tdWA.innerHTML = `<a class="wa" href="${r.waLink}" target="_blank">Open</a>`; }
-    else { tdWA.innerHTML = `<span class="small">n/a</span>`; }
-    tr.appendChild(tdWA);
+    const tdAgency = document.createElement('td'); tdAgency.textContent = r.agency||''; tr.appendChild(tdAgency);
+    const tdSuburb = document.createElement('td'); tdSuburb.textContent = r.suburb||''; tr.appendChild(tdSuburb);
 
     body.appendChild(tr);
   }
 }
 
-async function loadData(){
+function getChecked() {
+  return $$('.row-check:checked').map(x=>parseInt(x.dataset.idx,10)).filter(n=>!isNaN(n));
+}
+
+async function applyBulk(){
+  const st = $('#bulk-status').value;
+  const rows = getChecked();
+  if(!st) return toast('Choose a status');
+  if(!rows.length) return toast('Select rows');
+  if(!confirm(`Set ${rows.length} row(s) to "${st}"?`)) return;
   try{
-    const [rows, stats] = await Promise.all([
-      api('getRecruitsView', {}),
-      api('getStats', {}).catch(_=>null)
-    ]);
-    RAW_ROWS = rows || [];
-    renderKPIs(stats);
+    await api('bulkUpdateStatus', {rowIndices: rows, newStatus: st});
+    toast('Updated');
+    await load();
+  }catch(e){ console.error(e); toast('Bulk failed'); }
+}
+
+function clearBulk(){ $$('#grid .row-check').forEach(c=>c.checked=false); $('#bulk-status').value=''; }
+
+async function load(){
+  try{
+    const [rows, stats] = await Promise.all([api('getRecruitsView', {}), api('getStats', {}).catch(_=>null)]);
+    ALL = rows || [];
+    // fill agencies list
+    fillAgency(uniq(ALL.map(r=>r.agency)));
+    renderKPIs(ALL, stats);
     renderTable();
-    toast('Loaded');
   }catch(e){
     console.error(e);
     toast('Load failed');
   }
 }
 
-function getSelectedIdxs(){
-  return $$('.row-check:checked').map(ch => parseInt(ch.getAttribute('data-idx'),10)).filter(n=>!isNaN(n));
-}
+function wire(){
+  $('#btn-refresh').addEventListener('click', load);
+  $('#btn-prepare').addEventListener('click', async()=>{ try{ await api('prepareSheet', {}); toast('Prepared'); }catch(e){ toast('Prepare failed'); }});
+  $('#btn-rerun').addEventListener('click', async()=>{ try{ await api('rerunAutomations', {}); toast('Refreshed'); await load(); }catch(e){ toast('Re-run failed'); }});
+  $('#btn-fix').addEventListener('click', async()=>{ try{ await api('fixDataValidation', {}); toast('Dropdowns fixed'); }catch(e){ toast('Fix failed'); }});
+  $('#btn-import').addEventListener('click', async()=>{ if(!confirm('Process Import → Recruits now?')) return; try{ const m = await api('processImport', {}); toast(m||'Imported'); await load(); }catch(e){ toast('Import failed'); }});
 
-async function applyBulkStatus(){
-  const newStatus = $('#bulk-status').value;
-  if(!newStatus) return toast('Choose a bulk status');
-  const ids = getSelectedIdxs();
-  if(!ids.length) return toast('Select at least one row');
-  if(!confirm(`Set ${ids.length} row(s) to "${newStatus}"?`)) return;
-  try{ await api('bulkUpdateStatus', { rowIndices: ids, newStatus }); toast('Bulk updated'); await loadData(); }
-  catch(e){ console.error(e); toast('Bulk update failed'); }
-}
-
-function exportCSV(){
-  const rows = [['Listing Type','Listing Ref','Name','Surname','Contact Number','Email','Suburb','Agency','Status','Last Contact Date','Notes','WhatsApp Link','WhatsApp Message','Contact ID']];
-  for(const r of VIEW_ROWS){
-    rows.push([r.listingType||'', r.listingRef||'', r.name||'', r.surname||'', r.phone||'', r.email||'', r.suburb||'', r.agency||'', r.status||'', fmtDate(r.lastContactDate)||'', (r.notes||'').replace(/\n/g,' '), r.waLink||'', r.waMessage||'', r.contactId||'']);
-  }
-  const csv = rows.map(row => row.map(v => /[",\n]/.test(v) ? `"${String(v).replace(/"/g,'""')}"` : String(v)).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'kwe-recruits.csv';
-  a.click();
-}
-
-function clearFilters(){
-  $('#search').value = '';
-  $('#status-filter').value = '';
-  $('#type-filter').value = '';
-  renderTable();
-}
-
-function wireUI(){
-  fillStatusDropdowns();
-  $('#btn-refresh').addEventListener('click', loadData);
-  $('#btn-rerun').addEventListener('click', async ()=>{
-    try{ await api('rerunAutomations', {}); toast('Re-run complete'); await loadData(); }
-    catch(e){ console.error(e); toast('Re-run failed'); }
-  });
-  $('#btn-fix').addEventListener('click', async()=>{
-    try{ await api('fixDataValidation', {}); toast('Dropdowns fixed'); }
-    catch(e){ console.error(e); toast('Fix failed'); }
-  });
-  $('#btn-import').addEventListener('click', async()=>{
-    if(!confirm('Process Import sheet into Recruits now?')) return;
-    try{ const msg = await api('processImport', {}); toast(msg || 'Import complete'); await loadData(); }
-    catch(e){ console.error(e); toast('Import failed'); }
-  });
-  $('#btn-setup-import').addEventListener('click', async()=>{
-    try{ await api('setupImportSheet', {}); toast('Import/Contacts/Interactions ready'); }
-    catch(e){ console.error(e); toast('Setup failed'); }
-  });
+  $('#btn-reset').addEventListener('click', ()=>{ $('#search').value=''; $('#agency-filter').value=''; $('#status-filter').value=''; CURRENT_STATUS_FILTER=''; renderTable(); renderKPIs(ALL, null); });
   $('#search').addEventListener('input', renderTable);
-  $('#status-filter').addEventListener('change', renderTable);
-  $('#type-filter').addEventListener('change', renderTable);
-  $('#clear-filters').addEventListener('click', clearFilters);
-  $('#apply-bulk').addEventListener('click', applyBulkStatus);
-  $('#export-csv').addEventListener('click', exportCSV);
-  $('#check-all').addEventListener('change', (e)=>{ $$('.row-check').forEach(c=>c.checked=e.target.checked); });
+  $('#agency-filter').addEventListener('change', renderTable);
+  $('#status-filter').addEventListener('change', ()=>{ CURRENT_STATUS_FILTER = $('#status-filter').value; renderTable(); renderKPIs(ALL, null); });
+
+  $('#check-all').addEventListener('change', e=>{ $$('.row-check').forEach(c=>c.checked=e.target.checked); });
+  $('#btn-apply').addEventListener('click', applyBulk);
+  $('#btn-clear').addEventListener('click', clearBulk);
+
+  // status options
+  fillDropdowns();
 }
 
-window.addEventListener('DOMContentLoaded', async()=>{ wireUI(); await loadData(); });
+window.addEventListener('DOMContentLoaded', ()=>{ wire(); load(); });
