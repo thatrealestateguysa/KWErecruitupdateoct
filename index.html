@@ -13,7 +13,7 @@
       <h1>KWE Recruit Machine</h1>
     </div>
     <div class="actions">
-      <button id="syncBtn" class="btn ghost" title="Rebuild WA links + Contacts">Sync</button>
+      <button id="syncBtn" class="btn ghost">Sync</button>
       <button id="refreshBtn" class="btn ghost">Refresh</button>
     </div>
   </header>
@@ -21,41 +21,29 @@
   <section id="diag" class="diag hidden">
     <div class="diag-row">
       <strong>Diagnostics:</strong>
-      <span id="diagText">Checking API…</span>
+      <span id="diagText">Checking…</span>
       <button id="hideDiag" class="btn x">×</button>
     </div>
   </section>
 
-  <section class="metrics" id="metrics">
-    <div class="metric">
-      <div class="label">Total</div>
-      <div class="value" id="mTotal">—</div>
-    </div>
-    <div class="metric">
-      <div class="label">CONTACTED (UNIQUE)</div>
-      <div class="value" id="mUnique">—</div>
-    </div>
-    <div class="metric">
-      <div class="label">Last Loaded</div>
-      <div class="value" id="mWhen">—</div>
-    </div>
+  <section class="metrics">
+    <div class="metric"><div class="label">TOTAL</div><div class="value" id="mTotal">—</div></div>
+    <div class="metric"><div class="label">CONTACTED (UNIQUE)</div><div class="value" id="mUnique">—</div></div>
+    <div class="metric"><div class="label">Last Loaded</div><div class="value" id="mWhen">—</div></div>
   </section>
 
   <section class="controls">
-    <div class="tabs" id="statusTabs"></div>
-    <input id="searchInput" class="search" placeholder="Search name, phone, suburb, agency, ref…" />
+    <div class="tabs" id="statusTabs">
+      <!-- rendered at load so it's always visible -->
+    </div>
+    <input id="searchInput" class="search" placeholder="Search name, phone, suburb, agency…" />
   </section>
 
   <main>
     <div id="empty" class="empty hidden">
       <div class="card">
         <h3>No data</h3>
-        <p>Either your API isn’t returning rows yet, or the Web App isn’t deployed with the latest backend.</p>
-        <ol>
-          <li>In Apps Script: <b>Deploy → Manage deployments → New version</b></li>
-          <li>Permissions: <b>Anyone</b> (or Anyone with the link)</li>
-          <li>Open the sheet and run: <b>Recruit Machine → Re-sync Contacts</b></li>
-        </ol>
+        <p>Ensure the Web App is deployed & the sheet has rows.</p>
       </div>
     </div>
     <div class="table-wrap">
@@ -63,17 +51,15 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>Type</th>
-            <th>Ref</th>
+            <th>Listing</th>
+            <th>WhatsApp</th>
+            <th>Status</th>
             <th>Name</th>
             <th>Surname</th>
-            <th>Phone</th>
-            <th>Suburb</th>
+            <th>Contact Number</th>
+            <th>Notes</th>
             <th>Agency</th>
-            <th>Status</th>
-            <th>Last</th>
-            <th>Note</th>
-            <th>WA</th>
+            <th>Suburb</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -81,17 +67,14 @@
     </div>
   </main>
 
-  <footer>
-    <small>© 2025 KWE Explore — Frontend (Dark)</small>
-  </footer>
-
+  <footer><small>© 2025 KWE Explore — Frontend (Dark)</small></footer>
   <div id="toast"></div>
 
   <script>
     window.KWE_CONFIG = {
       apiBase: "https://script.google.com/macros/s/AKfycbx4quLIJebb42H1qNdKfoNdlFoi4fQjbPg604C3xJ9UJee9L0PC9xdlB5hfFbDWkbQE/exec",
-      autoSyncOnLoad: true,
-      showDiagnostics: true
+      showDiagnostics: true,
+      autoSyncOnLoad: false
     };
   </script>
   <script src="app.js"></script>
