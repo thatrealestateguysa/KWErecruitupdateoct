@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KWE Recruit Machine</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🏠</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="logo">🏠</div>
+      <div>
+        <h1>KWE Recruit Machine</h1>
+        <div class="subtitle">Lightweight CRM for agent recruiting</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="btn-refresh">Refresh</button>
+      <button id="btn-rerun" class="primary">Re-run</button>
+      <button id="btn-fix">Fix Dropdowns</button>
+      <span class="divider"></span>
+      <button id="btn-import">Import → Recruits</button>
+      <button id="btn-setup-import">Setup Import</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- KPI tiles -->
+    <section class="kpis" id="kpis">
+      <!-- filled by JS -->
+    </section>
+
+    <!-- Filters -->
+    <section class="filters">
+      <input id="search" type="search" placeholder="Search name, phone, email, suburb, agency…" />
+      <select id="status-filter">
+        <option value="">All statuses</option>
+      </select>
+      <select id="type-filter">
+        <option value="">All listing types</option>
+        <option>On Show</option>
+        <option>New Listing</option>
+        <option>Rental</option>
+        <option>Other</option>
+      </select>
+      <button id="clear-filters">Clear</button>
+      <div class="spacer"></div>
+      <select id="bulk-status">
+        <option value="">Bulk: set status…</option>
+      </select>
+      <button id="apply-bulk" class="secondary">Apply to selected</button>
+      <button id="export-csv">Export CSV</button>
+    </section>
+
+    <!-- Table -->
+    <section class="table-wrap">
+      <table id="grid">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="check-all"></th>
+            <th>Listing</th>
+            <th>Ref</th>
+            <th>Name</th>
+            <th>Surname</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Suburb</th>
+            <th>Agency</th>
+            <th>Status</th>
+            <th>Last Contact</th>
+            <th>Notes</th>
+            <th>WhatsApp</th>
+          </tr>
+        </thead>
+        <tbody id="grid-body"></tbody>
+      </table>
+      <div id="empty" class="empty">No rows. Try clearing filters or click Re-run.</div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div>API: <code id="api-url"></code></div>
+    <div>v2025.10.14</div>
+  </footer>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    window.DEFAULT_API = "https://script.google.com/macros/s/AKfycbxsYJMTFMxCp2hx1X7HrTSs-bhsr3m4rDWCZ_XPZNy1sKsR8Zyz43ox6Z0a_yNh-B5d8Q/exec";
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>
