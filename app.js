@@ -1,6 +1,7 @@
 (function () {
   const API = window.KWE_CONFIG.apiBase;
   const AUTO_SYNC = !!window.KWE_CONFIG.autoSyncOnLoad;
+  const SHOW_DIAG = !!window.KWE_CONFIG.showDiagnostics;
 
   const STATUS_ORDER = [
     'To Contact',
@@ -18,13 +19,11 @@
     'JOINED'
   ];
 
-  // --- helpers
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
   const fmtDate = (val) => {
     if (!val) return '';
     try {
-      // Apps Script may deliver as string or serial; show yyyy-mm-dd
       const d = new Date(val);
       if (isNaN(d.getTime())) return String(val);
       return d.toISOString().slice(0,10);
@@ -36,6 +35,12 @@
     el.classList.add('show');
     setTimeout(()=> el.classList.remove('show'), 2200);
   };
+  const showDiag = (text) => {
+    if (!SHOW_DIAG) return;
+    const b = $('#diag'); const t = $('#diagText');
+    t.textContent = text;
+    b.classList.remove('hidden');
+  };
 
   async function apiPost(action, payload={}) {
     const res = await fetch(API, {
@@ -43,9 +48,37 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, payload })
     });
-    const data = await res.json().catch(()=>({result:'error', message:'Bad JSON'}));
-    if (data.result !== 'success') throw new Error(data.message || 'Request failed');
-    return data.payload ?? data.message;
+    const raw = await res.text();
+    try {
+      const data = JSON.parse(raw);
+      if (data.result !== 'success') throw new Error(data.message || 'Request failed');
+      return data.payload ?? data.message;
+    } catch (err) {
+      showDiag(`API error for "${action}": ${err.message}. Raw: ${raw.slice(0,160)}…`);
+      throw err;
+    }
+  }
+
+  async function runDiagnostics() {
+    try {
+      const getRes = await fetch(API);
+      const getTxt = await getRes.text();
+      let okGet = false;
+      try {
+        const js = JSON.parse(getTxt);
+        okGet = js && js.result === 'success';
+      } catch (_) {}
+      showDiag(okGet ? 'GET ✓ Web App reachable' : 'GET ? Received non-JSON or error; check deploy/public access');
+    } catch (e) {
+      showDiag('GET ✗ Could not reach Web App (network or permissions)');
+    }
+    try {
+      await apiPost('getStats', {});
+      showDiag('POST ✓ Actions available');
+    } catch (e) {
+      showDiag('POST ✗ "getStats" failed — likely old deployment. Deploy a new version.');
+    }
+    $('#hideDiag').addEventListener('click', ()=> $('#diag').classList.add('hidden'));
   }
 
   // state
@@ -79,20 +112,24 @@
 
   function getFiltered() {
     const q = $('#searchInput').value.trim().toLowerCase();
-    let arr = recruits;
+    let arr = recruits.slice();
     if (activeStatus !== 'All') arr = arr.filter(r => String(r.status||'') === activeStatus);
-    if (!q) return arr;
-    return arr.filter(r => {
+    if (q) arr = arr.filter(r => {
       return [r.name, r.surname, r.phone, r.suburb, r.agency, r.listingRef]
         .map(x => String(x||'').toLowerCase()).some(x => x.includes(q));
     });
+    // newest last contact first
+    arr.sort((a,b)=> new Date(b.lastContactDate||0) - new Date(a.lastContactDate||0));
+    return arr;
   }
 
   function renderTable() {
     const tbody = $('#rows');
     tbody.innerHTML = '';
     const items = getFiltered();
-    items.forEach((r, idx) => {
+    $('#empty').classList.toggle('hidden', items.length > 0);
+
+    items.forEach((r) => {
       const tr = document.createElement('tr');
 
       const waButton = r.waLink ? `<a class="wa" href="${r.waLink}" target="_blank" rel="noopener">Open</a>` : '';
@@ -122,7 +159,7 @@
       tbody.appendChild(tr);
     });
 
-    // bind events
+    // events
     $$('#rows select.status').forEach(sel => {
       sel.addEventListener('change', async (e) => {
         const rowIndex = Number(e.target.getAttribute('data-idx'));
@@ -130,16 +167,12 @@
         try {
           await apiPost('updateSingleStatus', { rowIndex, newStatus });
           toast('Status updated');
-          // move row locally
           const item = recruits.find(x => x.idx === rowIndex);
           if (item) item.status = newStatus;
-          // update counts
           await refreshStatsOnly();
-          // if filtered by a status and it no longer fits, re-render
           renderTable();
         } catch (err) {
-          console.error(err);
-          toast('Update failed');
+          toast('Update failed (see Diagnostics)');
         }
       });
     });
@@ -152,8 +185,7 @@
           await apiPost('updateSingleNote', { rowIndex, newNote });
           toast('Note saved');
         } catch (err) {
-          console.error(err);
-          toast('Save failed');
+          toast('Save failed (see Diagnostics)');
         }
       });
     });
@@ -172,10 +204,12 @@
 
   async function refreshAll({doSync=false}={}) {
     if (doSync) {
-      try { await apiPost('resyncContacts', {}); } catch(e) { /* non-fatal */ }
+      showDiag('Running resync…');
+      try { await apiPost('resyncContacts', {}); } catch(e) { showDiag('Resync failed — continue anyway.'); }
     }
     const [view] = await Promise.all([apiPost('getRecruitsView', {}), refreshStatsOnly()]);
     recruits = Array.isArray(view) ? view : [];
+    if (!recruits.length) showDiag('No rows returned — confirm SHEET_ID/SHEET_NAME and data exists.');
     renderTable();
   }
 
@@ -189,9 +223,9 @@
     $('#searchInput').addEventListener('input', ()=> renderTable());
   }
 
-  // init
   document.addEventListener('DOMContentLoaded', async () => {
     bindControls();
+    if (SHOW_DIAG) await runDiagnostics();
     await refreshAll({doSync: AUTO_SYNC});
   });
 })();

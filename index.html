@@ -13,10 +13,18 @@
       <h1>KWE Recruit Machine</h1>
     </div>
     <div class="actions">
-      <button id="syncBtn" class="btn ghost" title="Re-sync WhatsApp/Contacts">Sync</button>
+      <button id="syncBtn" class="btn ghost" title="Rebuild WA links + Contacts">Sync</button>
       <button id="refreshBtn" class="btn ghost">Refresh</button>
     </div>
   </header>
+
+  <section id="diag" class="diag hidden">
+    <div class="diag-row">
+      <strong>Diagnostics:</strong>
+      <span id="diagText">Checking API…</span>
+      <button id="hideDiag" class="btn x">×</button>
+    </div>
+  </section>
 
   <section class="metrics" id="metrics">
     <div class="metric">
@@ -35,33 +43,46 @@
 
   <section class="controls">
     <div class="tabs" id="statusTabs"></div>
-    <input id="searchInput" class="search" placeholder="Search name, phone, suburb, agency…" />
+    <input id="searchInput" class="search" placeholder="Search name, phone, suburb, agency, ref…" />
   </section>
 
   <main>
-    <table class="list">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Listing Type</th>
-          <th>Listing Ref</th>
-          <th>Name</th>
-          <th>Surname</th>
-          <th>Phone</th>
-          <th>Suburb</th>
-          <th>Agency</th>
-          <th>Status</th>
-          <th>Last Contact</th>
-          <th>Note</th>
-          <th>WA</th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
+    <div id="empty" class="empty hidden">
+      <div class="card">
+        <h3>No data</h3>
+        <p>Either your API isn’t returning rows yet, or the Web App isn’t deployed with the latest backend.</p>
+        <ol>
+          <li>In Apps Script: <b>Deploy → Manage deployments → New version</b></li>
+          <li>Permissions: <b>Anyone</b> (or Anyone with the link)</li>
+          <li>Open the sheet and run: <b>Recruit Machine → Re-sync Contacts</b></li>
+        </ol>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="list">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Type</th>
+            <th>Ref</th>
+            <th>Name</th>
+            <th>Surname</th>
+            <th>Phone</th>
+            <th>Suburb</th>
+            <th>Agency</th>
+            <th>Status</th>
+            <th>Last</th>
+            <th>Note</th>
+            <th>WA</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
   </main>
 
   <footer>
-    <small>© 2025 KWE Explore — Frontend v1</small>
+    <small>© 2025 KWE Explore — Frontend (Dark)</small>
   </footer>
 
   <div id="toast"></div>
@@ -69,7 +90,8 @@
   <script>
     window.KWE_CONFIG = {
       apiBase: "https://script.google.com/macros/s/AKfycbx4quLIJebb42H1qNdKfoNdlFoi4fQjbPg604C3xJ9UJee9L0PC9xdlB5hfFbDWkbQE/exec",
-      autoSyncOnLoad: true
+      autoSyncOnLoad: true,
+      showDiagnostics: true
     };
   </script>
   <script src="app.js"></script>
