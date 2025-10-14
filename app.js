@@ -1,4 +1,4 @@
-/* Compact red/grey/white frontend, GET fallback, instant row removal */
+/* Compact red/grey/white frontend, GET fallback, instant row removal, auto-refresh on open */
 const API = window.DEFAULT_API;
 document.getElementById('api-url').textContent = API;
 
@@ -78,7 +78,7 @@ function uniq(arr){ return [...new Set(arr.filter(Boolean))].sort((a,b)=>String(
 
 function fillDropdowns(){
   const sf = $('#status-filter'); const bs = $('#bulk-status');
-  sf.innerHTML = `<option value="">Invite to Events/ Networking</option>` + STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
+  sf.innerHTML = `<option value="">All statuses</option>` + STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
   bs.innerHTML = `<option value="">Set Status to...</option>` + STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
 }
 
@@ -149,7 +149,7 @@ function renderTable(){
         await postAPI('updateSingleStatus', {rowIndex:r.idx, newStatus});
         r.status = newStatus;
         r.lastContactDate = new Date().toISOString();
-        renderTable();           // row disappears if filtered
+        renderTable();           // row disappears if filtered out
         renderKPIs(ALL, null);   // instant KPI refresh
         toast('Status updated');
       }catch(e){
@@ -215,6 +215,16 @@ async function load(){
   }
 }
 
+async function boot(){
+  // Clear any stale filters first
+  CURRENT_STATUS_FILTER = '';
+  $('#status-filter').value = '';
+  $('#agency-filter').value = '';
+  $('#search').value = '';
+  try { await postAPI('rerunAutomations', {}); } catch(_) { /* ignore if not available */ }
+  await load();
+}
+
 function wire(){
   $('#btn-refresh').addEventListener('click', load);
   $('#btn-prepare').addEventListener('click', async()=>{ try{ await postAPI('prepareSheet', {}); toast('Prepared'); }catch(e){ toast('Prepare failed'); }});
@@ -234,4 +244,4 @@ function wire(){
   fillDropdowns();
 }
 
-window.addEventListener('DOMContentLoaded', ()=>{ wire(); load(); });
+window.addEventListener('DOMContentLoaded', ()=>{ wire(); boot(); });
