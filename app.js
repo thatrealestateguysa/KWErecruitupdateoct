@@ -2,7 +2,6 @@
   const API = window.KWE_CONFIG.apiBase;
   const SHOW_DIAG = !!window.KWE_CONFIG.showDiagnostics;
 
-  // exact order & labels requested (includes the new statuses)
   const STATUS_ORDER = [
     'To Contact',
     'Whatsapp Sent',
@@ -44,18 +43,10 @@
       throw new Error(js.message||'GET not success');
     }catch(e){ throw new Error(`GET parse: ${e.message}. Raw=${raw.slice(0,120)}…`); }
   }
+  function mapHeaders(hdrs){ const m={}; hdrs.forEach((h,i)=>{ m[String(h||'').trim().toLowerCase()] = i; }); return m; }
+  function pick(row, map, key){ const i = map[key]; return i==null ? '' : (row[i] ?? ''); }
 
-  function mapHeaders(hdrs){
-    const m={}; hdrs.forEach((h,i)=>{ m[String(h||'').trim().toLowerCase()] = i; }); return m;
-  }
-  function pick(row, map, key){
-    const i = map[key]; return i==null ? '' : (row[i] ?? '');
-  }
-
-  // state
-  let all = []; // normalized rows
-  let counts = {}; let total = 0; let unique = 0;
-  let active = 'All';
+  let all = []; let counts = {}; let total = 0; let unique = 0; let active='All';
 
   function compute(){
     const c={}; const seen=new Set();
@@ -66,9 +57,9 @@
 
   function buildTabs(){
     const wrap = $('#statusTabs'); wrap.innerHTML='';
-    const list = ['All', ...STATUS_ORDER];
+    const list=['All',...STATUS_ORDER];
     list.forEach(s=>{
-      const el = document.createElement('div');
+      const el=document.createElement('div');
       el.className='tab'+(s===active?' active':'');
       el.innerHTML = `${s} <span class="count">${s==='All'?total:(counts[s]||0)}</span>`;
       el.addEventListener('click', ()=>{ active=s; buildTabs(); render(); });
@@ -79,10 +70,7 @@
   function filtered(){
     const q = $('#searchInput').value.trim().toLowerCase();
     let rows = active==='All'? all.slice() : all.filter(r => String(r.status||'')===active);
-    if(q){
-      rows = rows.filter(r => [r.name,r.surname,r.phone,r.suburb,r.agency].some(x=>String(x||'').toLowerCase().includes(q)));
-    }
-    // sort by last contact desc if present
+    if(q) rows = rows.filter(r => [r.name,r.surname,r.phone,r.suburb,r.agency].some(x=>String(x||'').toLowerCase().includes(q)));
     rows.sort((a,b)=> new Date(b.lastContactDate||0) - new Date(a.lastContactDate||0));
     return rows;
   }
@@ -92,15 +80,15 @@
     const rows = filtered();
     $('#empty').classList.toggle('hidden', rows.length>0);
     rows.forEach(r=>{
-      const tr = document.createElement('tr');
+      const tr=document.createElement('tr');
       const statusSel = `<select class="status" data-idx="${r.idx}">${STATUS_ORDER.map(s=>`<option value="${s}" ${s===r.status?'selected':''}>${s}</option>`).join('')}</select>`;
       tr.innerHTML = `
         <td>${r.idx+1}</td>
         <td><span class="badge">${r.listingType||''}</span></td>
         <td>${r.waLink?`<a class="wa" href="${r.waLink}" target="_blank" rel="noopener">Open</a>`:''}</td>
         <td>${statusSel}</td>
-        <td>${r.name||''}</td>
-        <td>${r.surname||''}</td>
+        <td title="${r.name||''}">${r.name||''}</td>
+        <td title="${r.surname||''}">${r.surname||''}</td>
         <td>${r.phone||''}</td>
         <td>
           <div class="note-row">
@@ -108,20 +96,19 @@
             <button class="btn" data-save-note="${r.idx}">Save</button>
           </div>
         </td>
-        <td>${r.agency||''}</td>
-        <td>${r.suburb||''}</td>
+        <td title="${r.agency||''}">${r.agency||''}</td>
+        <td title="${r.suburb||''}">${r.suburb||''}</td>
       `;
       tb.appendChild(tr);
     });
 
-    // events
     $$('#rows select.status').forEach(sel=>{
       sel.addEventListener('change', async (e)=>{
         const idx = Number(e.target.getAttribute('data-idx')); const newStatus=e.target.value;
         try{
           await post('updateSingleStatus',{rowIndex: idx, newStatus});
           const row = all.find(x=>x.idx===idx); if(row) row.status=newStatus;
-          compute(); buildTabs(); render(); // row will move if a tab is active
+          compute(); buildTabs(); render();
           toast('Status updated');
         }catch(err){ showDiag(err.message); toast('Failed'); }
       });
@@ -139,12 +126,10 @@
   }
 
   async function load(){
-    // try modern endpoint first
     try{
       const rows = await post('getRecruitsView',{});
-      if(Array.isArray(rows) && rows.length){
-        all = rows.map((r,i)=>({idx:r.idx ?? i, ...r}));
-      }else{ throw new Error('Empty view'); }
+      if(Array.isArray(rows) && rows.length){ all = rows.map((r,i)=>({idx:r.idx ?? i, ...r})); }
+      else { throw new Error('Empty view'); }
     }catch(e){
       showDiag('Falling back to GET (legacy backend)');
       const js = await get();
@@ -184,27 +169,19 @@
     });
     $('#searchInput').addEventListener('input', render);
 
-    // draw tabs immediately so the user sees them
-    // with zero counts until data loads
-    (function drawEmptyTabs(){
+    // draw empty tabs first
+    (function(){
       const wrap = $('#statusTabs'); wrap.innerHTML='';
       ['All',...STATUS_ORDER].forEach(s=>{
-        const el = document.createElement('div'); el.className='tab'+(s==='All'?' active':'');
+        const el=document.createElement('div'); el.className='tab'+(s==='All'?' active':'');
         el.innerHTML = `${s} <span class="count">0</span>`;
         el.addEventListener('click', ()=>{ active=s; buildTabs(); render(); });
         wrap.appendChild(el);
       });
     })();
 
-    try {
-      await load();
-      compute();
-      buildTabs();
-      render();
-    } catch(e) {
-      showDiag('Load failed: '+e.message);
-      $('#empty').classList.remove('hidden');
-    }
+    try { await load(); compute(); buildTabs(); render(); }
+    catch(e){ showDiag('Load failed: '+e.message); $('#empty').classList.remove('hidden'); }
   }
   document.addEventListener('DOMContentLoaded', init);
 })();
