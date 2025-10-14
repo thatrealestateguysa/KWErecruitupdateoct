@@ -1,23 +1,17 @@
 # KWE Recruit Machine — Frontend
 
-A lightweight, static frontend for your Apps Script backend.
+Pointed at:
+- API: `https://script.google.com/macros/s/AKfycbx4quLIJebb42H1qNdKfoNdlFoi4fQjbPg604C3xJ9UJee9L0PC9xdlB5hfFbDWkbQE/exec`
 
-## Configure
-- Backend URL is set in **index.html** (window.DEFAULT_API).
-
-## Run locally
-Just open `index.html` in a modern browser.
-
-## Deploy to GitHub Pages
-1. Create a repo and push these files.
-2. Enable GitHub Pages (Settings → Pages → Source = main / root).
-3. Visit the published URL.
+## Run
+Serve as static files (GitHub Pages / Netlify). No build step needed.
 
 ## Features
-- KPI tiles (calls `getStats`, falls back to client counts).
-- Filters (search, status, listing type).
-- Inline status update + notes save.
-- Bulk update status.
-- Import controls (process import, setup import).
-- Re-run automations & fix dropdowns.
-- CSV export of current view.
+- Auto-sync on page load (can toggle in `index.html` -> `autoSyncOnLoad`)
+- Status tabs (compact), KW red/grey/white
+- Search across name/phone/suburb/agency/ref
+- Inline status update and notes (row moves after update)
+- Metrics: Total, CONTACTED (UNIQUE), Last Loaded
+
+## Deploy
+Upload `index.html`, `styles.css`, and `app.js` to your hosting.

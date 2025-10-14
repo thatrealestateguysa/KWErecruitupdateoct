@@ -1,84 +1,77 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>KWE Recruit Machine</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🏠</text></svg>">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="bar">
-    <div class="left">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">KW</span>
       <h1>KWE Recruit Machine</h1>
     </div>
-    <div class="right">
-      <button id="btn-refresh" class="ghost">Refresh</button>
-      <button id="btn-prepare" class="ghost">Prepare</button>
-      <button id="btn-rerun" class="primary">Re-run</button>
-      <button id="btn-fix" class="ghost">Fix Dropdowns</button>
-      <button id="btn-import" class="ghost">Import → Recruits</button>
+    <div class="actions">
+      <button id="syncBtn" class="btn ghost" title="Re-sync WhatsApp/Contacts">Sync</button>
+      <button id="refreshBtn" class="btn ghost">Refresh</button>
     </div>
   </header>
 
-  <main class="wrap">
-    <section id="kpi-row" class="kpis"></section>
+  <section class="metrics" id="metrics">
+    <div class="metric">
+      <div class="label">Total</div>
+      <div class="value" id="mTotal">—</div>
+    </div>
+    <div class="metric">
+      <div class="label">CONTACTED (UNIQUE)</div>
+      <div class="value" id="mUnique">—</div>
+    </div>
+    <div class="metric">
+      <div class="label">Last Loaded</div>
+      <div class="value" id="mWhen">—</div>
+    </div>
+  </section>
 
-    <section class="panel">
-      <div class="panel-title">FILTERS</div>
-      <div class="filters">
-        <input id="search" type="search" placeholder="Search…">
-        <select id="agency-filter"><option value="">Agency (all)</option></select>
-        <select id="status-filter"><option value="">All statuses</option></select>
-        <div class="spacer"></div>
-        <button id="btn-reset" class="ghost">Reset</button>
-      </div>
-      <div class="hint">Click a status block to filter. Your selection stays active while you update rows. Notes save with the <b>Save</b> button per row.</div>
-    </section>
+  <section class="controls">
+    <div class="tabs" id="statusTabs"></div>
+    <input id="searchInput" class="search" placeholder="Search name, phone, suburb, agency…" />
+  </section>
 
-    <section class="panel">
-      <div class="panel-title">RECRUITS</div>
-
-      <div class="bulk">
-        <label><input type="checkbox" id="check-all"> Select all on page</label>
-        <div class="right">
-          <span class="muted">BULK ACTIONS</span>
-          <select id="bulk-status"><option value="">Set Status to...</option></select>
-          <button id="btn-apply" class="ghost">Apply</button>
-          <button id="btn-clear" class="ghost">Clear</button>
-        </div>
-      </div>
-
-      <div class="table-wrap">
-        <table id="grid">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Listing Type</th>
-              <th>WhatsApp Link</th>
-              <th>Status</th>
-              <th>Name</th>
-              <th>Surname</th>
-              <th>Contact Number</th>
-              <th>Notes</th>
-              <th>Agency</th>
-              <th>Suburb</th>
-            </tr>
-          </thead>
-          <tbody id="grid-body"></tbody>
-        </table>
-        <div id="empty" class="empty">No rows.</div>
-      </div>
-    </section>
-
-    <footer class="foot">
-      <span>API: <code id="api-url"></code></span>
-      <span>v2025.10.14.0338</span>
-    </footer>
+  <main>
+    <table class="list">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Listing Type</th>
+          <th>Listing Ref</th>
+          <th>Name</th>
+          <th>Surname</th>
+          <th>Phone</th>
+          <th>Suburb</th>
+          <th>Agency</th>
+          <th>Status</th>
+          <th>Last Contact</th>
+          <th>Note</th>
+          <th>WA</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
   </main>
 
-  <div id="toast" class="toast"></div>
-  <script>window.DEFAULT_API = "https://script.google.com/macros/s/AKfycbxsYJMTFMxCp2hx1X7HrTSs-bhsr3m4rDWCZ_XPZNy1sKsR8Zyz43ox6Z0a_yNh-B5d8Q/exec";</script>
+  <footer>
+    <small>© 2025 KWE Explore — Frontend v1</small>
+  </footer>
+
+  <div id="toast"></div>
+
+  <script>
+    window.KWE_CONFIG = {
+      apiBase: "https://script.google.com/macros/s/AKfycbx4quLIJebb42H1qNdKfoNdlFoi4fQjbPg604C3xJ9UJee9L0PC9xdlB5hfFbDWkbQE/exec",
+      autoSyncOnLoad: true
+    };
+  </script>
   <script src="app.js"></script>
 </body>
 </html>

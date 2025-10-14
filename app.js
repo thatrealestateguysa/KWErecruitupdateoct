@@ -1,279 +1,197 @@
-/* v6: Adds CONTACTED (UNIQUE) KPI + special filter. Auto-refresh on open, GET fallback, compact theme */
-const API = window.DEFAULT_API;
-document.getElementById('api-url').textContent = API;
+(function () {
+  const API = window.KWE_CONFIG.apiBase;
+  const AUTO_SYNC = !!window.KWE_CONFIG.autoSyncOnLoad;
 
-const STATUSES = [
-  'To Contact','Whatsapp Sent','No Whatsapp','Replied','Not Interested in KW',
-  'Invite to Events/ Networking','Appointment','Ready to join KW','JOINED',
-  'Appointment booked','cultivate','decided not to join','do not contact'
-];
+  const STATUS_ORDER = [
+    'To Contact',
+    'Whatsapp Sent',
+    'No Whatsapp',
+    'Replied',
+    'Not Interested in KW',
+    'Invite to Events/ Networking',
+    'Appointment',
+    'Appointment booked',
+    'Ready to join KW',
+    'cultivate',
+    'decided not to join',
+    'do not contact',
+    'JOINED'
+  ];
 
-const CONTACTED_STATUSES = [
-  'Whatsapp Sent','Replied','Invite to Events/ Networking','Appointment','Appointment booked',
-  'Ready to join KW','JOINED','Not Interested in KW','cultivate','decided not to join','do not contact'
-];
-const FILTER_CONTACTED = '__CONTACTED__';
+  // --- helpers
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const fmtDate = (val) => {
+    if (!val) return '';
+    try {
+      // Apps Script may deliver as string or serial; show yyyy-mm-dd
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return String(val);
+      return d.toISOString().slice(0,10);
+    } catch { return String(val); }
+  };
+  const toast = (msg) => {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(()=> el.classList.remove('show'), 2200);
+  };
 
-const KPI_ORDER = [
-  ['TOTAL', null],
-  ['CONTACTED (UNIQUE)', FILTER_CONTACTED],
-  ['TO CONTACT','To Contact'],
-  ['WHATSAPP SENT','Whatsapp Sent'],
-  ['NO WHATSAPP','No Whatsapp'],
-  ['REPLIED','Replied'],
-  ['NOT INTERESTED IN KW','Not Interested in KW'],
-  ['INVITE TO EVENTS/ NETWORKING','Invite to Events/ Networking'],
-  ['APPOINTMENT','Appointment'],
-  ['READY TO JOIN KW','Ready to join KW'],
-  ['JOINED','JOINED'],
-  ['APPOINTMENT BOOKED','Appointment booked'],
-  ['CULTIVATE','cultivate'],
-  ['DECIDED NOT TO JOIN','decided not to join'],
-  ['DO NOT CONTACT','do not contact']
-];
+  async function apiPost(action, payload={}) {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload })
+    });
+    const data = await res.json().catch(()=>({result:'error', message:'Bad JSON'}));
+    if (data.result !== 'success') throw new Error(data.message || 'Request failed');
+    return data.payload ?? data.message;
+  }
 
-const $ = s=>document.querySelector(s);
-const $$ = s=>Array.from(document.querySelectorAll(s));
-function toast(m,t=2400){const el=$('#toast'); el.textContent=m; el.style.display='block'; setTimeout(()=>el.style.display='none',t);}
+  // state
+  let recruits = [];
+  let counts = {};
+  let total = 0;
+  let unique = 0;
+  let activeStatus = 'All';
 
-async function postAPI(action, payload={}){
-  const r = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action,payload})});
-  const j = await r.json().catch(()=>({result:'error',message:'Invalid JSON'}));
-  if(j.result!=='success') throw new Error(j.message||'API error');
-  return j.payload || j.message || 'OK';
-}
-async function getAPI(){
-  const r = await fetch(API);
-  const j = await r.json().catch(()=>({result:'error'}));
-  if(j.result!=='success' || !Array.isArray(j.data)) throw new Error('GET fallback failed');
-  return j.data;
-}
-
-function mapSheetRowsToView(matrix){
-  if(!matrix || matrix.length<2) return [];
-  const headers = matrix[0].map(x=>String(x||'').trim().toLowerCase());
-  const idx = name => headers.indexOf(name.toLowerCase());
-  const pick = (row, colName) => { const i = idx(colName); return i>=0 ? row[i] : ''; };
-  const rows = [];
-  for(let i=1;i<matrix.length;i++){
-    const r = matrix[i];
-    if(r.every(cell => (cell===null || cell===undefined || String(cell).trim()===''))) continue;
-    rows.push({
-      idx: i-1,
-      listingType: pick(r,'Listing Type'),
-      listingRef: pick(r,'Listing Ref'),
-      name: pick(r,'Name'),
-      surname: pick(r,'Surname'),
-      phone: pick(r,'Contact Number'),
-      email: pick(r,'Email'),
-      suburb: pick(r,'Suburb'),
-      agency: pick(r,'Agency'),
-      status: pick(r,'Status'),
-      lastContactDate: pick(r,'Last Contact Date'),
-      notes: pick(r,'Notes'),
-      waLink: pick(r,'WhatsApp Link'),
-      waMessage: pick(r,'WhatsApp Message'),
-      contactId: pick(r,'Contact ID')
+  function statusCountsToTabs() {
+    const tabs = $('#statusTabs');
+    tabs.innerHTML = '';
+    const statuses = ['All', ...STATUS_ORDER];
+    statuses.forEach(s => {
+      const c = s === 'All' ? total : (counts[s] || 0);
+      const el = document.createElement('div');
+      el.className = 'tab' + (s === activeStatus ? ' active' : '');
+      el.textContent = s;
+      const span = document.createElement('span');
+      span.className = 'count';
+      span.textContent = c;
+      el.appendChild(span);
+      el.addEventListener('click', ()=> {
+        activeStatus = s;
+        statusCountsToTabs();
+        renderTable();
+      });
+      tabs.appendChild(el);
     });
   }
-  return rows;
-}
 
-let ALL = [], VIEW = [], CURRENT_STATUS_FILTER = '';
+  function getFiltered() {
+    const q = $('#searchInput').value.trim().toLowerCase();
+    let arr = recruits;
+    if (activeStatus !== 'All') arr = arr.filter(r => String(r.status||'') === activeStatus);
+    if (!q) return arr;
+    return arr.filter(r => {
+      return [r.name, r.surname, r.phone, r.suburb, r.agency, r.listingRef]
+        .map(x => String(x||'').toLowerCase()).some(x => x.includes(q));
+    });
+  }
 
-function uniq(arr){ return [...new Set(arr.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b))); }
+  function renderTable() {
+    const tbody = $('#rows');
+    tbody.innerHTML = '';
+    const items = getFiltered();
+    items.forEach((r, idx) => {
+      const tr = document.createElement('tr');
 
-function fillDropdowns(){
-  const sf = $('#status-filter'); const bs = $('#bulk-status');
-  sf.innerHTML = `<option value="">All statuses</option>` + STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
-  bs.innerHTML = `<option value="">Set Status to...</option>` + STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
-}
+      const waButton = r.waLink ? `<a class="wa" href="${r.waLink}" target="_blank" rel="noopener">Open</a>` : '';
+      const statusSel = `<select class="status" data-idx="${r.idx}">
+        ${STATUS_ORDER.map(s => `<option value="${s}" ${s===r.status?'selected':''}>${s}</option>`).join('')}
+      </select>`;
 
-function fillAgency(agencies){
-  const sel = $('#agency-filter');
-  sel.innerHTML = `<option value="">Agency (all)</option>` + agencies.map(a=>`<option value="${a}">${a}</option>`).join('');
-}
+      tr.innerHTML = `
+        <td>${r.idx+1}</td>
+        <td><span class="badge">${r.listingType||''}</span></td>
+        <td>${r.listingRef||''}</td>
+        <td>${r.name||''}</td>
+        <td>${r.surname||''}</td>
+        <td>${r.phone||''}</td>
+        <td>${r.suburb||''}</td>
+        <td>${r.agency||''}</td>
+        <td>${statusSel}</td>
+        <td>${fmtDate(r.lastContactDate)||''}</td>
+        <td>
+          <div class="note-row">
+            <input type="text" placeholder="Add note…" value="${(r.notes||'').toString().replace(/"/g,'&quot;')}" data-idx="${r.idx}" />
+            <button class="btn" data-save-note="${r.idx}">Save</button>
+          </div>
+        </td>
+        <td>${waButton}</td>
+      `;
+      tbody.appendChild(tr);
+    });
 
-function computeCounts(rows){
-  const counts = {};
-  rows.forEach(r=>{ const k = String(r.status||'').trim(); counts[k]=(counts[k]||0)+1; });
-  return counts;
-}
+    // bind events
+    $$('#rows select.status').forEach(sel => {
+      sel.addEventListener('change', async (e) => {
+        const rowIndex = Number(e.target.getAttribute('data-idx'));
+        const newStatus = e.target.value;
+        try {
+          await apiPost('updateSingleStatus', { rowIndex, newStatus });
+          toast('Status updated');
+          // move row locally
+          const item = recruits.find(x => x.idx === rowIndex);
+          if (item) item.status = newStatus;
+          // update counts
+          await refreshStatsOnly();
+          // if filtered by a status and it no longer fits, re-render
+          renderTable();
+        } catch (err) {
+          console.error(err);
+          toast('Update failed');
+        }
+      });
+    });
+    $$('#rows button[data-save-note]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const rowIndex = Number(e.target.getAttribute('data-save-note'));
+        const input = $(`#rows input[data-idx="${rowIndex}"]`);
+        const newNote = input ? input.value : '';
+        try {
+          await apiPost('updateSingleNote', { rowIndex, newNote });
+          toast('Note saved');
+        } catch (err) {
+          console.error(err);
+          toast('Save failed');
+        }
+      });
+    });
+  }
 
-function computeDerived(rows){
-  const set = new Set();
-  let rowsContacted = 0;
-  for(const r of rows){
-    const contacted = CONTACTED_STATUSES.includes(String(r.status||'')) || !!r.lastContactDate;
-    if(contacted){
-      rowsContacted++;
-      const key = String(r.contactId||'').trim() || String(r.phone||'').replace(/\D/g,'') || String(r.email||'').trim().toLowerCase();
-      if(key) set.add(key);
+  async function refreshStatsOnly() {
+    const s = await apiPost('getStats', {});
+    total = s.total || 0;
+    counts = s.counts || {};
+    unique = s.contactedUniqueByPhone || 0;
+    $('#mTotal').textContent = total;
+    $('#mUnique').textContent = unique;
+    $('#mWhen').textContent = new Date().toLocaleString();
+    statusCountsToTabs();
+  }
+
+  async function refreshAll({doSync=false}={}) {
+    if (doSync) {
+      try { await apiPost('resyncContacts', {}); } catch(e) { /* non-fatal */ }
     }
-  }
-  return { contactedUnique: set.size, contactedRows: rowsContacted };
-}
-
-function renderKPIs(rows, serverStats){
-  const el = $('#kpi-row');
-  const counts = serverStats?.counts || computeCounts(rows);
-  const total = serverStats?.total ?? rows.length;
-  const derived = computeDerived(rows);
-  el.innerHTML = KPI_ORDER.map(([label, status])=>{
-    let val;
-    if(status === FILTER_CONTACTED){ val = derived.contactedUnique; }
-    else { val = status ? (counts[status]||0) : total; }
-    const active = (status && CURRENT_STATUS_FILTER===status) || (!status && !CURRENT_STATUS_FILTER);
-    return `<div class="kpi ${active?'active':''}" data-status="${status||''}">
-      <div class="val">${val}</div>
-      <div class="lab">${label}</div>
-    </div>`;
-  }).join('');
-  $$('#kpi-row .kpi').forEach(k=>k.addEventListener('click',()=>{
-    CURRENT_STATUS_FILTER = k.dataset.status || '';
-    $('#status-filter').value = CURRENT_STATUS_FILTER;
+    const [view] = await Promise.all([apiPost('getRecruitsView', {}), refreshStatsOnly()]);
+    recruits = Array.isArray(view) ? view : [];
     renderTable();
-    renderKPIs(ALL, serverStats);
-  }));
-}
-
-function matchFilters(r){
-  const q = $('#search').value.trim().toLowerCase();
-  const ag = $('#agency-filter').value;
-  const st = $('#status-filter').value || CURRENT_STATUS_FILTER;
-
-  if(q){
-    const hay = [r.name,r.surname,r.phone,r.email,r.suburb,r.agency].map(x=>String(x||'').toLowerCase()).join(' ');
-    if(!hay.includes(q)) return false;
   }
-  if(ag && String(r.agency||'')!==ag) return false;
 
-  if(st){
-    if(st === FILTER_CONTACTED){
-      const contacted = CONTACTED_STATUSES.includes(String(r.status||'')) || !!r.lastContactDate;
-      if(!contacted) return false;
-    }else{
-      if(String(r.status||'')!==st) return false;
-    }
-  }
-  return true;
-}
-
-function renderTable(){
-  const body = $('#grid-body'); body.innerHTML='';
-  VIEW = ALL.filter(matchFilters);
-  $('#empty').style.display = VIEW.length ? 'none' : 'block';
-
-  for(const r of VIEW){
-    const tr = document.createElement('tr');
-
-    const tdChk = document.createElement('td'); tdChk.innerHTML = `<input class="row-check" type="checkbox" data-idx="${r.idx}">`; tr.appendChild(tdChk);
-    const tdType = document.createElement('td'); tdType.textContent = r.listingType||''; tr.appendChild(tdType);
-    const tdWa = document.createElement('td'); tdWa.innerHTML = r.waLink ? `<a class="wa" target="_blank" href="${r.waLink}">Open</a>` : '<span class="muted">n/a</span>'; tr.appendChild(tdWa);
-
-    // Status select
-    const tdStatus = document.createElement('td');
-    const sel = document.createElement('select');
-    sel.innerHTML = STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('');
-    sel.value = r.status || '';
-    sel.addEventListener('change', async()=>{
-      const newStatus = sel.value;
-      try{
-        await postAPI('updateSingleStatus', {rowIndex:r.idx, newStatus});
-        r.status = newStatus;
-        r.lastContactDate = new Date().toISOString();
-        renderTable();           // row disappears if filtered out
-        renderKPIs(ALL, null);   // instant KPI refresh (derived too)
-        toast('Status updated');
-      }catch(e){
-        console.error(e);
-        toast('Failed to update status');
-        sel.value = r.status || '';
-      }
+  function bindControls() {
+    $('#refreshBtn').addEventListener('click', ()=> refreshAll({doSync:false}));
+    $('#syncBtn').addEventListener('click', async ()=> {
+      toast('Syncing…');
+      await refreshAll({doSync:true});
+      toast('Synced');
     });
-    tdStatus.appendChild(sel); tr.appendChild(tdStatus);
-
-    const tdName = document.createElement('td'); tdName.textContent = r.name||''; tr.appendChild(tdName);
-    const tdSurname = document.createElement('td'); tdSurname.textContent = r.surname||''; tr.appendChild(tdSurname);
-    const tdPhone = document.createElement('td'); tdPhone.textContent = r.phone||''; tr.appendChild(tdPhone);
-
-    // Notes area
-    const tdNotes = document.createElement('td');
-    const ta = document.createElement('textarea'); ta.className='textarea'; ta.value = r.notes || '';
-    const btn = document.createElement('button'); btn.textContent = 'Save'; btn.className='ghost'; btn.style.marginTop='6px';
-    btn.addEventListener('click', async()=>{
-      try{ await postAPI('updateSingleNote', {rowIndex:r.idx, newNote: ta.value}); r.notes = ta.value; toast('Note saved'); }
-      catch(e){ console.error(e); toast('Failed to save note'); }
-    });
-    tdNotes.appendChild(ta); tdNotes.appendChild(btn);
-    tr.appendChild(tdNotes);
-
-    const tdAgency = document.createElement('td'); tdAgency.textContent = r.agency||''; tr.appendChild(tdAgency);
-    const tdSuburb = document.createElement('td'); tdSuburb.textContent = r.suburb||''; tr.appendChild(tdSuburb);
-
-    body.appendChild(tr);
+    $('#searchInput').addEventListener('input', ()=> renderTable());
   }
-}
 
-function getChecked(){ return $$('.row-check:checked').map(x=>parseInt(x.dataset.idx,10)).filter(n=>!isNaN(n)); }
-
-async function applyBulk(){
-  const st = $('#bulk-status').value;
-  const rows = getChecked();
-  if(!st) return toast('Choose a status');
-  if(!rows.length) return toast('Select rows');
-  if(!confirm(`Set ${rows.length} row(s) to "${st}"?`)) return;
-  try{
-    await postAPI('bulkUpdateStatus', {rowIndices: rows, newStatus: st});
-    ALL.forEach(r=>{ if(rows.includes(r.idx)) r.status = st; });
-    renderTable(); renderKPIs(ALL, null);
-    toast('Updated');
-  }catch(e){ console.error(e); toast('Bulk failed'); }
-}
-
-function clearBulk(){ $$('#grid .row-check').forEach(c=>c.checked=false); $('#bulk-status').value=''; }
-
-async function load(){
-  try{
-    let rows;
-    try{ rows = await postAPI('getRecruitsView', {}); }
-    catch(e){ const matrix = await getAPI(); rows = mapSheetRowsToView(matrix); }
-    ALL = rows || [];
-    let stats=null; try{ stats = await postAPI('getStats', {});}catch(_){}
-    fillAgency(uniq(ALL.map(r=>r.agency)));
-    renderKPIs(ALL, stats);
-    renderTable();
-  }catch(e){
-    console.error(e); toast('Load failed');
-  }
-}
-
-async function boot(){
-  CURRENT_STATUS_FILTER = '';
-  $('#status-filter').value = '';
-  $('#agency-filter').value = '';
-  $('#search').value = '';
-  try { await postAPI('rerunAutomations', {}); } catch(_) { /* ok if not present */ }
-  await load();
-}
-
-function wire(){
-  $('#btn-refresh').addEventListener('click', load);
-  $('#btn-prepare').addEventListener('click', async()=>{ try{ await postAPI('prepareSheet', {}); toast('Prepared'); }catch(e){ toast('Prepare failed'); }});
-  $('#btn-rerun').addEventListener('click', async()=>{ try{ await postAPI('rerunAutomations', {}); toast('Refreshed'); await load(); }catch(e){ toast('Re-run failed'); }});
-  $('#btn-fix').addEventListener('click', async()=>{ try{ await postAPI('fixDataValidation', {}); toast('Dropdowns fixed'); }catch(e){ toast('Fix failed'); }});
-  $('#btn-import').addEventListener('click', async()=>{ if(!confirm('Process Import → Recruits now?')) return; try{ const m = await postAPI('processImport', {}); toast(m||'Imported'); await load(); }catch(e){ toast('Import failed'); }});
-
-  $('#btn-reset').addEventListener('click', ()=>{ $('#search').value=''; $('#agency-filter').value=''; $('#status-filter').value=''; CURRENT_STATUS_FILTER=''; renderTable(); renderKPIs(ALL, null); });
-  $('#search').addEventListener('input', renderTable);
-  $('#agency-filter').addEventListener('change', renderTable);
-  $('#status-filter').addEventListener('change', ()=>{ CURRENT_STATUS_FILTER = $('#status-filter').value; renderTable(); renderKPIs(ALL, null); });
-
-  $('#check-all').addEventListener('change', e=>{ $$('.row-check').forEach(c=>c.checked=e.target.checked); });
-  $('#btn-apply').addEventListener('click', applyBulk);
-  $('#btn-clear').addEventListener('click', clearBulk);
-
-  fillDropdowns();
-}
-
-window.addEventListener('DOMContentLoaded', ()=>{ wire(); boot(); });
+  // init
+  document.addEventListener('DOMContentLoaded', async () => {
+    bindControls();
+    await refreshAll({doSync: AUTO_SYNC});
+  });
+})();
