@@ -1,4 +1,4 @@
-/* Compact red/grey/white frontend, GET fallback, instant row removal, auto-refresh on open */
+/* v6: Adds CONTACTED (UNIQUE) KPI + special filter. Auto-refresh on open, GET fallback, compact theme */
 const API = window.DEFAULT_API;
 document.getElementById('api-url').textContent = API;
 
@@ -8,8 +8,15 @@ const STATUSES = [
   'Appointment booked','cultivate','decided not to join','do not contact'
 ];
 
+const CONTACTED_STATUSES = [
+  'Whatsapp Sent','Replied','Invite to Events/ Networking','Appointment','Appointment booked',
+  'Ready to join KW','JOINED','Not Interested in KW','cultivate','decided not to join','do not contact'
+];
+const FILTER_CONTACTED = '__CONTACTED__';
+
 const KPI_ORDER = [
   ['TOTAL', null],
+  ['CONTACTED (UNIQUE)', FILTER_CONTACTED],
   ['TO CONTACT','To Contact'],
   ['WHATSAPP SENT','Whatsapp Sent'],
   ['NO WHATSAPP','No Whatsapp'],
@@ -93,12 +100,29 @@ function computeCounts(rows){
   return counts;
 }
 
+function computeDerived(rows){
+  const set = new Set();
+  let rowsContacted = 0;
+  for(const r of rows){
+    const contacted = CONTACTED_STATUSES.includes(String(r.status||'')) || !!r.lastContactDate;
+    if(contacted){
+      rowsContacted++;
+      const key = String(r.contactId||'').trim() || String(r.phone||'').replace(/\D/g,'') || String(r.email||'').trim().toLowerCase();
+      if(key) set.add(key);
+    }
+  }
+  return { contactedUnique: set.size, contactedRows: rowsContacted };
+}
+
 function renderKPIs(rows, serverStats){
   const el = $('#kpi-row');
   const counts = serverStats?.counts || computeCounts(rows);
   const total = serverStats?.total ?? rows.length;
+  const derived = computeDerived(rows);
   el.innerHTML = KPI_ORDER.map(([label, status])=>{
-    const val = status ? (counts[status]||0) : total;
+    let val;
+    if(status === FILTER_CONTACTED){ val = derived.contactedUnique; }
+    else { val = status ? (counts[status]||0) : total; }
     const active = (status && CURRENT_STATUS_FILTER===status) || (!status && !CURRENT_STATUS_FILTER);
     return `<div class="kpi ${active?'active':''}" data-status="${status||''}">
       <div class="val">${val}</div>
@@ -117,12 +141,21 @@ function matchFilters(r){
   const q = $('#search').value.trim().toLowerCase();
   const ag = $('#agency-filter').value;
   const st = $('#status-filter').value || CURRENT_STATUS_FILTER;
+
   if(q){
     const hay = [r.name,r.surname,r.phone,r.email,r.suburb,r.agency].map(x=>String(x||'').toLowerCase()).join(' ');
     if(!hay.includes(q)) return false;
   }
   if(ag && String(r.agency||'')!==ag) return false;
-  if(st && String(r.status||'')!==st) return false;
+
+  if(st){
+    if(st === FILTER_CONTACTED){
+      const contacted = CONTACTED_STATUSES.includes(String(r.status||'')) || !!r.lastContactDate;
+      if(!contacted) return false;
+    }else{
+      if(String(r.status||'')!==st) return false;
+    }
+  }
   return true;
 }
 
@@ -150,7 +183,7 @@ function renderTable(){
         r.status = newStatus;
         r.lastContactDate = new Date().toISOString();
         renderTable();           // row disappears if filtered out
-        renderKPIs(ALL, null);   // instant KPI refresh
+        renderKPIs(ALL, null);   // instant KPI refresh (derived too)
         toast('Status updated');
       }catch(e){
         console.error(e);
@@ -216,12 +249,11 @@ async function load(){
 }
 
 async function boot(){
-  // Clear any stale filters first
   CURRENT_STATUS_FILTER = '';
   $('#status-filter').value = '';
   $('#agency-filter').value = '';
   $('#search').value = '';
-  try { await postAPI('rerunAutomations', {}); } catch(_) { /* ignore if not available */ }
+  try { await postAPI('rerunAutomations', {}); } catch(_) { /* ok if not present */ }
   await load();
 }
 
