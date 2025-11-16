@@ -1,400 +1,67 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>KWE Recruit Machine</title>
-  <!-- Tailwind -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            kwred: '#C70000',
-            ink: '#111315',
-            panel: '#1a1d21',
-            line: '#2a2f36',
-            mute: '#9aa3af'
-          },
-          boxShadow: {
-            soft: '0 4px 18px rgba(0,0,0,0.25)'
-          }
-        }
-      }
-    }
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <style>
-    html,body { height:100%; background:#1a1d21; } /* gray background */
-    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif; }
-    .chip { display:inline-flex; align-items:center; gap:.5rem; border-radius:9999px; padding:.375rem .75rem; font-size:.875rem; background-color:#1a1d21; border:1px solid #2a2f36; color:#e5e7eb; transition:all .15s; }
-    .chip.active { background-color:#111315; border-color:#C70000; color:#fff; }
-    .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:0.75rem; padding:.5rem .75rem; font-size:.875rem; font-weight:500; background-color:#1a1d21; border:1px solid #2a2f36; color:#e5e7eb; transition:all .15s; }
-    .btn-ghost { border-color:transparent; }
-    .btn:hover { border-color:#C70000; }
-    .btn-red { background-color:#C70000; color:#fff; border-color:#C70000; }
-    .pill { font-size:.75rem; letter-spacing:.05em; text-transform:uppercase; border-radius:9999px; background-color:#1a1d21; border:1px solid #2a2f36; padding:.25rem .625rem; color:#d1d5db; }
-    .field { width:100%; border-radius:.5rem; background-color:#1a1d21; border:1px solid #2a2f36; padding:.5rem .75rem; color:#f3f4f6; outline:none; }
-    .field::placeholder { color:#9aa3af; }
-    .field:focus { border-color:#C70000; }
-    .table-head { text-align:left; font-size:.75rem; text-transform:uppercase; letter-spacing:.06em; color:#9aa3af; }
-    .row { display:grid; grid-template-columns:64px 120px 110px 220px 160px 160px 180px 1fr 200px 160px; gap:1rem; align-items:center; border-bottom:1px solid #2a2f36; padding:0.75rem 0; }
-    .row:hover { background:#15181c; }
-    .thin-scroll::-webkit-scrollbar{height:10px;width:10px}
-    .thin-scroll::-webkit-scrollbar-thumb{background:#2a2f36;border-radius:999px}
-  </style>
+  <meta charset="UTF-8" />
+  <title>KW Explore Recruit Frontend</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="text-gray-100">
-  <!-- Top bar -->
-  <header class="sticky top-0 z-20 border-b border-line bg-ink/95 backdrop-blur">
-    <div class="mx-auto max-w-[1400px] px-5 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <img src="./assets/logo.png" alt="KW Explore" class="h-8 object-contain" />
-        <div class="text-lg font-semibold">KWE Recruit Machine</div>
-        <div id="diag" class="ml-4 pill hidden"></div>
-      </div>
-      <div class="flex items-center gap-2">
-        <button id="btnSync" class="btn">Sync</button>
-        <button id="btnRefresh" class="btn">Refresh</button>
+<body>
+  <header class="app-header">
+    <div class="logo-wrap">
+      <img src="kw-explore-logo.png" alt="KW Explore" class="logo" />
+      <div class="title-wrap">
+        <h1>KW Explore Recruit Hub</h1>
+        <p>WhatsApp-first follow-up and 2026 business consults</p>
       </div>
     </div>
+    <div class="api-status" id="apiStatus">Connecting…</div>
   </header>
 
-  <main class="mx-auto max-w-[1400px] px-5 py-6 space-y-6">
-    <!-- Summary -->
-    <section class="grid grid-cols-12 gap-4">
-      <div class="col-span-12 lg:col-span-4 bg-panel border border-line rounded-2xl p-4 shadow-soft">
-        <div class="text-xs text-mute uppercase">Total</div>
-        <div id="totalCount" class="text-4xl font-extrabold mt-1">–</div>
+  <main class="app-main">
+    <section class="controls-card">
+      <div class="controls-left">
+        <button id="refreshBtn" class="btn primary">Refresh Leads</button>
       </div>
-      <div class="col-span-12 lg:col-span-4 bg-panel border border-line rounded-2xl p-4 shadow-soft">
-        <div class="text-xs text-mute uppercase">Contacted (Unique)</div>
-        <div id="uniqCount" class="text-4xl font-extrabold mt-1">–</div>
-      </div>
-      <div class="col-span-12 lg:col-span-4 bg-panel border border-line rounded-2xl p-4 shadow-soft">
-        <div class="text-xs text-mute uppercase">Last Loaded</div>
-        <div id="lastLoaded" class="text-xl font-semibold mt-1">–</div>
+      <div class="controls-right">
+        <button id="sendEmailBtn" class="btn secondary">Send Email to Selected</button>
       </div>
     </section>
 
-    <!-- Filters -->
-    <section class="bg-panel border border-line rounded-2xl p-4 shadow-soft">
-      <div class="flex items-center justify-between gap-4 flex-wrap">
-        <div id="chips" class="flex items-center gap-2 flex-wrap"></div>
-        <div class="flex items-center gap-2">
-          <input id="search" class="field w-[320px]" placeholder="Search name, phone, suburb, agency" />
-        </div>
+    <section class="table-card">
+      <div class="table-header-row">
+        <div class="table-title">Leads</div>
+        <div class="table-meta" id="leadCount">0 leads</div>
       </div>
-    </section>
-
-    <!-- Table -->
-    <section class="bg-panel border border-line rounded-2xl shadow-soft overflow-hidden">
-      <div class="px-5 py-3" style="display:grid;grid-template-columns:64px 120px 110px 220px 160px 160px 180px 1fr 200px 160px;gap:1rem;">
-        <div class="table-head">#</div>
-        <div class="table-head">Listing</div>
-        <div class="table-head">Whatsapp</div>
-        <div class="table-head">Status</div>
-        <div class="table-head">Name</div>
-        <div class="table-head">Surname</div>
-        <div class="table-head">Contact number</div>
-        <div class="table-head">Notes</div>
-        <div class="table-head">Agency</div>
-        <div class="table-head">Suburb</div>
+      <div class="table-wrapper">
+        <table id="leadsTable">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="selectAll" /></th>
+              <th>Source</th>
+              <th>Status</th>
+              <th>WhatsApp</th>
+              <th>Name</th>
+              <th>Surname</th>
+              <th>Mobile</th>
+              <th>Email</th>
+              <th>Agency</th>
+              <th>Region</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="leadsBody">
+            <!-- rows injected by app.js -->
+          </tbody>
+        </table>
       </div>
-      <div id="rows" class="divide-y divide-line max-h-[67vh] overflow-auto thin-scroll px-5"></div>
     </section>
   </main>
 
-  <script>
-    // ====== CONFIG ======
-    const API = "https://script.google.com/macros/s/AKfycbxpIrds0rcQ_FEKswi4ECdIEJshD_DHTay5ORVVbilu7SKXxbUe1yR42TjoVKspzDuHlg/exec";
+  <footer class="app-footer">
+    <span>KW Explore · Recruit Machine</span>
+  </footer>
 
-    const STATUS_OPTIONS = [
-      'To Contact',
-      'Whatsapp Sent',
-      'No Whatsapp',
-      'Replied',
-      'Not Interested in KW',
-      'Invite to Events/ Networking',
-      'Appointment',
-      'Ready to join KW',
-      'JOINED',
-      'Appointment booked',
-      'cultivate',
-      'decided not to join',
-      'do not contact'
-    ];
-
-    const CHIP_ORDER = [
-      'All',
-      'To Contact',
-      'Whatsapp Sent',
-      'No Whatsapp',
-      'Replied',
-      'Not Interested in KW',
-      'Invite to Events/ Networking',
-      'Appointment',
-      'Appointment booked',
-      'Ready to join KW',
-      'cultivate',
-      'decided not to join',
-      'do not contact',
-      'JOINED'
-    ];
-
-    // ====== STATE ======
-    let VIEW = [];      // raw rows from backend
-    let FILTER = 'All'; // active chip
-    let SEARCH = '';    // search string
-    let COUNTS = {};    // status -> count
-    let CONTACTED_UNIQUE = 0;
-    let DIAG = '';      // diagnostics banner text
-
-    // ====== API helper (POST first, then GET fallback) ======
-    async function api(action, payload = {}) {
-      // Try POST JSON (preferred)
-      try {
-        const res = await fetch(API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          cache: 'no-store',
-          body: JSON.stringify({ action, payload })
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.result === 'success') {
-            DIAG = '';
-            setDiag();
-            return json.payload ?? json.message ?? null;
-          }
-          throw new Error(json.message || 'API error');
-        }
-        throw new Error('HTTP ' + res.status);
-      } catch (err) {
-        // Fallback: GET with query params
-        try {
-          const qs = new URLSearchParams(Object.assign({ action }, payload)).toString();
-          const res = await fetch(API + '?' + qs, { method: 'GET', cache: 'no-store' });
-          const json = await res.json();
-          if (json.result === 'success') {
-            DIAG = 'Falling back to GET (legacy backend)';
-            setDiag();
-            return json.payload ?? json.message ?? null;
-          }
-          throw new Error(json.message || 'API error');
-        } catch (err2) {
-          DIAG = 'Backend unreachable';
-          setDiag(true);
-          throw err2;
-        }
-      }
-    }
-
-    // ====== UI helpers ======
-    function setDiag(isError = false) {
-      const el = document.getElementById('diag');
-      if (!DIAG) { el.classList.add('hidden'); return; }
-      el.classList.remove('hidden');
-      el.textContent = DIAG;
-      el.className = 'ml-4 pill ' + (isError ? 'border-red-500 text-red-300' : 'border-line text-gray-300');
-    }
-    function formatLastLoaded() {
-      const d = new Date();
-      const pad = n => n.toString().padStart(2, '0');
-      return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + ' ' +
-             d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
-    }
-
-    function computeCounts() {
-      COUNTS = {};
-      for (const r of VIEW) {
-        const s = (r.status || '').trim() || '(blank)';
-        COUNTS[s] = (COUNTS[s] || 0) + 1;
-      }
-    }
-
-    // ====== Chips ======
-    function renderChips() {
-      const wrap = document.getElementById('chips');
-      wrap.innerHTML = '';
-      const total = VIEW.length;
-
-      const chipDefs = CHIP_ORDER.map(name => [name, name === 'All' ? total : (COUNTS[name] || 0)]);
-
-      for (const [name, count] of chipDefs) {
-        const btn = document.createElement('button');
-        btn.className = 'chip' + (FILTER === name ? ' active' : '');
-        btn.innerHTML = '<span>' + name + '</span><span class="text-mute"> ' + count + '</span>';
-        btn.onclick = () => { FILTER = name; renderRows(); renderChips(); };
-        wrap.appendChild(btn);
-      }
-    }
-
-    // ====== Stats ======
-    function renderStats(total, uniq) {
-      document.getElementById('totalCount').textContent = total.toLocaleString();
-      document.getElementById('uniqCount').textContent = uniq.toLocaleString();
-      document.getElementById('lastLoaded').textContent = formatLastLoaded();
-    }
-
-    // ====== Row factory ======
-    function makeRow(r) {
-      const rowEl = document.createElement('div');
-      rowEl.className = 'row';
-      rowEl.dataset.id = r.idx;
-
-      const chip = (text) => '<span class="inline-flex items-center px-2 py-1 rounded-md text-xs border border-line bg-ink">' + text + '</span>';
-
-      const displayRow = r.idx + 2;
-
-      const selId = 'sel-' + r.idx;
-      const select = '<select id="' + selId + '" class="field">' +
-        STATUS_OPTIONS.map(s => '<option ' + (s===r.status?'selected':'') + '>' + s + '</option>').join('') +
-      '</select>';
-
-      const noteId = 'note-' + r.idx;
-      const note = '<input id="' + noteId + '" class="field" placeholder="Add note..." value="' + escapeHtml(r.notes || '') + '">';
-
-      const waDisabled = !r.waLink;
-      const waBtn = '<a ' + (waDisabled ? '' : ('href="' + r.waLink + '" target="_blank" rel="noopener"')) +
-        ' class="btn ' + (waDisabled ? 'btn-ghost cursor-not-allowed opacity-40' : '') + '">Open</a>';
-
-      rowEl.innerHTML =
-        '<div class="text-sm text-mute px-1">' + displayRow + '</div>' +
-        '<div class="px-1">' + chip(r.listingType || 'Other') + '</div>' +
-        '<div class="px-1">' + waBtn + '</div>' +
-        '<div class="px-1">' + select + '</div>' +
-        '<div class="truncate px-1">' + (r.name || '') + '</div>' +
-        '<div class="truncate px-1">' + (r.surname || '') + '</div>' +
-        '<div class="truncate px-1">' + (r.phone || '') + '</div>' +
-        '<div class="flex items-center gap-2 px-1">' + note +
-          '<button class="btn btn-red" data-save-note>Save</button>' +
-        '</div>' +
-        '<div class="truncate px-1">' + (r.agency || '') + '</div>' +
-        '<div class="truncate px-1">' + (r.suburb || '') + '</div>';
-
-      queueMicrotask(() => {
-        const sel = document.getElementById(selId);
-        sel.dataset.prevValue = sel.value;
-        sel.addEventListener('change', async (e) => {
-          await saveStatus(r.idx, e.target.value, sel, rowEl);
-        });
-        const noteInput = document.getElementById(noteId);
-        rowEl.querySelector('[data-save-note]').addEventListener('click', async () => {
-          await saveNote(r.idx, noteInput.value, rowEl);
-        });
-      });
-
-      return rowEl;
-    }
-
-    // ====== Rows render ======
-    function renderRows() {
-      const list = document.getElementById('rows');
-      list.innerHTML = '';
-      const q = (SEARCH || '').trim().toLowerCase();
-
-      const filtered = VIEW.filter(r => {
-        const byChip = FILTER === 'All' ? true : (r.status || '') === FILTER;
-        if (!byChip) return false;
-        if (!q) return true;
-        const hay = [r.name, r.surname, r.phone, r.email, r.agency, r.suburb, r.status, r.listingType]
-          .map(x => (x || '').toString().toLowerCase()).join(' ');
-        return hay.includes(q);
-      });
-
-      if (!filtered.length) {
-        const empty = document.createElement('div');
-        empty.className = 'py-10 text-center text-mute';
-        empty.textContent = 'No rows match your filters.';
-        list.appendChild(empty);
-        return;
-      }
-
-      for (const r of filtered) list.appendChild(makeRow(r));
-    }
-
-    // ====== Saves ======
-    async function saveStatus(idx, newStatus, selectEl, rowEl) {
-      rowEl.classList.add('opacity-60','pointer-events-none');
-      try {
-        await api('updateSingleStatus', { rowIndex: idx, newStatus });
-        selectEl.dataset.prevValue = newStatus;
-        rowEl.classList.add('ring','ring-emerald-500');
-        setTimeout(() => rowEl.classList.remove('ring','ring-emerald-500'), 500);
-        const rec = VIEW.find(x => x.idx === idx);
-        if (rec) rec.status = newStatus;
-        computeCounts();
-        renderChips();
-      } catch (e) {
-        console.error(e);
-        alert('Save failed: ' + e.message);
-        if (selectEl && selectEl.dataset.prevValue) selectEl.value = selectEl.dataset.prevValue;
-      } finally {
-        rowEl.classList.remove('opacity-60','pointer-events-none');
-      }
-    }
-
-    async function saveNote(idx, newNote, rowEl) {
-      rowEl.classList.add('opacity-60','pointer-events-none');
-      try {
-        await api('updateSingleNote', { rowIndex: idx, newNote });
-        rowEl.classList.add('ring','ring-emerald-500');
-        setTimeout(() => rowEl.classList.remove('ring','ring-emerald-500'), 500);
-        const rec = VIEW.find(x => x.idx === idx);
-        if (rec) rec.notes = newNote;
-      } catch (e) {
-        console.error(e);
-        alert('Save failed: ' + e.message);
-      } finally {
-        rowEl.classList.remove('opacity-60','pointer-events-none');
-      }
-    }
-
-    // ====== Load ======
-    async function loadAll() {
-      const [view, stats] = await Promise.all([
-        api('getRecruitsView'),
-        api('getStats')
-      ]);
-      VIEW = Array.isArray(view) ? view : [];
-      computeCounts();
-      CONTACTED_UNIQUE = stats && typeof stats.contactedUniqueByPhone === 'number'
-        ? stats.contactedUniqueByPhone : 0;
-      renderChips();
-      renderRows();
-      renderStats(VIEW.length, CONTACTED_UNIQUE);
-    }
-
-    // ====== Utils ======
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    }
-
-    // ====== Events ======
-    document.getElementById('btnRefresh').addEventListener('click', () => loadAll());
-    document.getElementById('btnSync').addEventListener('click', async () => {
-      try { await api('rerunAutomations'); } catch (_) {}
-      await loadAll();
-    });
-    document.getElementById('search').addEventListener('input', (e) => {
-      SEARCH = e.target.value || '';
-      renderRows();
-    });
-
-    // ====== Init ======
-    // Inject API URL token
-    document.currentScript.previousElementSibling && void 0;
-  </script>
-  <script>
-    // replace token in-place (safe for static deploys)
-    window.addEventListener('DOMContentLoaded', () => {
-      // No-op; token is already embedded during build
-    });
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
